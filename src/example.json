@@ -1,0 +1,42 @@
+[
+  {
+    "type": "Refuse",
+    "date": "2025-09-23",
+    "sprite": "refuse",
+    "bin": "purple lid bin",
+    "days_until": 1,
+    "next": true
+  },
+  {
+    "type": "Food waste",
+    "date": "2025-09-23",
+    "sprite": "food",
+    "bin": "brown caddy",
+    "days_until": 1,
+    "next": true
+  },
+  {
+    "type": "Garden waste",
+    "date": "2025-09-25",
+    "sprite": "garden",
+    "bin": "brown lid bin",
+    "days_until": 3,
+    "next": false
+  },
+  {
+    "type": "Mixed recycling",
+    "date": "2025-09-30",
+    "sprite": "recycling",
+    "bin": "black lid bin",
+    "days_until": 8,
+    "next": false
+  },
+  {
+    "type": "Paper \u0026 card",
+    "date": "2025-10-07",
+    "sprite": "paper",
+    "bin": "blue lid bin",
+    "days_until": 15,
+    "next": false
+  }
+]
