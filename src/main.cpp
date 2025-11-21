@@ -57,8 +57,7 @@ const uint64_t PRODUCTION_SLEEP_INTERVAL = 3ULL * 60 * 60 * 1000000; // 3 hours 
 // 2.9'' EPD Module
 GxEPD2_3C<GxEPD2_290_C90c, GxEPD2_290_C90c::HEIGHT> display(GxEPD2_290_C90c(/*CS=5*/ CS_PIN, /*DC=*/ DC_PIN, /*RES=*/ RES_PIN, /*BUSY=*/ BUSY_PIN)); // GDEM029C90 128x296, SSD1680
 
-// Configuration
-const char* webServiceURL = "http://bindicator.berwick.me.uk/?api_key=b981416ee6d64af24093289aa14e195afaa9256a4c5ecd342d71775f219eeb01&search=88%20cambridge%20road%20hitchin%20sg4%200jh";
+// Firmware update URLs
 const char* firmwareVersionURL = "http://bindicator.berwick.me.uk/firmware/version.txt";
 const char* firmwareDownloadURL = "http://bindicator.berwick.me.uk/firmware/bindicator.bin";
 
@@ -78,6 +77,8 @@ String getLastUpdateString();
 void setLastUpdateString(const String& value);
 String getApiKey();
 void setApiKey(const String& apiKey);
+String getUprn();
+void setUprn(const String& uprn);
 String buildWebServiceURL();
 String formatUpdateTime(time_t t);
 bool syncNTP();
@@ -571,7 +572,7 @@ void initializeConfig() {
     // Write default config
     JsonDocument doc;
     doc["api_key"] = "your_api_key_here";
-    doc["search"] = "88 cambridge road hitchin sg4 0jh";
+    doc["uprn"] = "100081258147";
     doc["firmware_version"] = FIRMWARE_VERSION;
     doc["production_mode"] = false; // Default to development mode
 
@@ -601,11 +602,11 @@ void initializeConfig() {
 
     // Read values from JSON
     String apiKey = doc["api_key"];
-    String search = doc["search"];
+    String uprn = doc["uprn"];
     String firmwareVersion = doc["firmware_version"];
 
     Serial.printf("API Key: %s\n", apiKey.c_str());
-    Serial.printf("Search: %s\n", search.c_str());
+    Serial.printf("UPRN: %s\n", uprn.c_str());
     Serial.printf("Firmware Version: %s\n", firmwareVersion.c_str());
 
     // Read production mode setting
@@ -819,21 +820,88 @@ void setApiKey(const String& apiKey) {
   configFile.close();
 }
 
+String getUprn() {
+  // Return the UPRN from the config file
+  File configFile = LittleFS.open(CONFIG_FILE, "r");
+  if (!configFile) {
+    Serial.println("Failed to open config file");
+    return "";
+  }
+
+  // Deserialize JSON from file
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, configFile);
+  if (error) {
+    Serial.println("Failed to parse config file");
+    configFile.close();
+    return "";
+  }
+
+  String uprn = doc["uprn"];
+  configFile.close();
+  return uprn;
+}
+
+void setUprn(const String& uprn) {
+  Serial.printf("Storing UPRN in config: %s\n", uprn.c_str());
+
+  // Read the existing config
+  File configFile = LittleFS.open(CONFIG_FILE, "r");
+  if (!configFile) {
+    Serial.println("Failed to open config file");
+    return;
+  }
+
+  // Deserialize JSON from file
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, configFile);
+  configFile.close();
+
+  if (error) {
+    Serial.println("Failed to parse config file");
+    return;
+  }
+
+  // Update UPRN
+  doc["uprn"] = uprn;
+
+  // Write the updated config
+  configFile = LittleFS.open(CONFIG_FILE, "w");
+  if (!configFile) {
+    Serial.println("Failed to open config file for writing");
+    return;
+  }
+
+  // Serialize JSON to file
+  if (serializeJson(doc, configFile) == 0) {
+    Serial.println("Failed to write config file");
+  } else {
+    Serial.println("UPRN updated successfully");
+  }
+
+  configFile.close();
+}
+
 String buildWebServiceURL() {
-  // Get API key from config
+  // Get API key and UPRN from config
   String apiKey = getApiKey();
+  String uprn = getUprn();
 
   if (apiKey.length() == 0) {
     Serial.println("Error: API key not configured");
     return "";
   }
 
-  // Base URL and search parameter (hardcoded for now, could also be stored in config)
-  String baseUrl = "http://bindicator.berwick.me.uk/";
-  String searchParam = "88%20cambridge%20road%20hitchin%20sg4%200jh";
+  if (uprn.length() == 0) {
+    Serial.println("Error: UPRN not configured");
+    return "";
+  }
 
-  // Build the complete URL
-  String url = baseUrl + "?api_key=" + apiKey + "&search=" + searchParam;
+  // Base URL with UPRN in the path
+  String baseUrl = "http://bindicator.berwick.me.uk/schedule/";
+
+  // Build the complete URL: baseUrl + uprn + "/?api_key=" + apiKey
+  String url = baseUrl + uprn + "/?api_key=" + apiKey;
 
   return url;
 }
