@@ -4,6 +4,7 @@
 
 #include <GxEPD2_BW.h>
 #include <GxEPD2_3C.h>
+#include <Fonts/FreeMono9pt7b.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <ArduinoJson.h>
 #include <ESP8266WiFi.h>
@@ -14,6 +15,8 @@
 #include <ArduinoOTA.h>
 #include <LittleFS.h>
 #include <time.h>
+#include <map>
+#include <vector>
 
 // Firmware version
 #define FIRMWARE_VERSION "0.0.1"
@@ -357,72 +360,103 @@ void displayBinSchedule() {
     return;
   }
 
+  // Group bins by days_until
+  struct BinInfo {
+    String type;
+    String binType;
+    bool isNext;
+  };
+
+  std::map<int, std::vector<BinInfo>> binsByDays;
+
+  for (JsonObject bin : doc.as<JsonArray>()) {
+    BinInfo info;
+    info.type = bin["type"].as<String>();
+    info.binType = bin["bin"].as<String>();
+    info.isNext = bin["next"];
+    int daysUntil = bin["days_until"];
+
+    binsByDays[daysUntil].push_back(info);
+  }
+
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
 
     // Title
-    display.setFont(&FreeMonoBold9pt7b);
-    display.setTextColor(GxEPD_BLACK);
-    display.setCursor(10, 20);
-    display.print("Bin Collection Schedule");
+    // display.setFont(&FreeMonoBold9pt7b);
+    // display.setTextColor(GxEPD_BLACK);
+    // display.setCursor(10, 20);
+    // display.print("Bin Collection Schedule");
+    //
+    // // Draw line under title
+    // display.drawLine(10, 25, (int16_t)(display.width() - 10), 25, GxEPD_BLACK);
 
-    // Draw line under title
-    display.drawLine(10, 25, (int16_t)(display.width() - 10), 25, GxEPD_BLACK);
+    // int yPos = 45;
+    int yPos = 20;
+    int lineHeight = 18;
+    int groupSpacing = 5;
 
-    int yPos = 45;
-    int lineHeight = 20;
-    int rightMargin = 10; // Right margin from edge of display
+    // Display bins grouped by days
+    for (const auto& entry : binsByDays) {
+      int daysUntil = entry.first;
+      const std::vector<BinInfo>& bins = entry.second;
 
-    // Display each bin collection
-    for (JsonObject bin : doc.as<JsonArray>()) {
-      const char* type = bin["type"];
-      const char* binType = bin["bin"];
-      int daysUntil = bin["days_until"];
-      bool isNext = bin["next"];
+      // Check if we have space for at least the header and one bin
+      if (yPos > display.height() - 30) break;
 
-      // Set color - red for next collections, black for others
-      if (isNext && display.epd2.hasColor) {
-        display.setTextColor(GxEPD_RED);
-      } else {
-        display.setTextColor(GxEPD_BLACK);
+      // Determine if any bin in this group is marked as "next"
+      bool groupIsNext = false;
+      for (const auto& bin : bins) {
+
+        if (bin.isNext) {
+          groupIsNext = true;
+          break;
+        }
       }
 
-      // Display bin type
-      display.setCursor((int16_t)10, (int16_t)yPos);
-      display.print(type);
+      // Display days header
+      auto textColour = groupIsNext && display.epd2.hasColor ? GxEPD_RED : GxEPD_BLACK;
+      auto headerFont = groupIsNext ? &FreeMonoBold9pt7b : nullptr;
+      auto binFont = groupIsNext ? &FreeMono9pt7b : nullptr;
+      display.setFont(headerFont);
+      display.setTextColor(textColour);
 
-      // Prepare right column text for days until
-      String daysText;
+      display.setCursor(10, (int16_t)yPos);
+
       if (daysUntil == 0) {
-        daysText = "TODAY";
+        display.print("TODAY");
       } else if (daysUntil == 1) {
-        daysText = "TOMORROW";
+        display.print("TOMORROW");
       } else {
-        daysText = String(daysUntil) + " days";
+        display.print(String(daysUntil) + " DAYS");
+      }
+      yPos = yPos + 2;
+      display.drawLine(10, yPos, (int16_t)(display.width() - 10), yPos, textColour);
+
+      yPos += lineHeight;
+
+      // Display all bins for this day
+      for (const auto& bin : bins) {
+        // Check if we're running out of space
+        if (yPos > display.height() - 30) break;
+
+        display.setFont(binFont);
+
+        display.setCursor(14, (int16_t)yPos);
+        display.print(bin.type);
+        yPos += 3;
+
+        // Display bin description (smaller font)
+        display.setFont();
+        display.setCursor(15, (int16_t)yPos);
+        display.print(bin.binType);
+
+        yPos += lineHeight + 3;
       }
 
-      // Calculate position for right-aligned text
-      int16_t x1, y1;
-      uint16_t w, h;
-      display.getTextBounds(daysText.c_str(), 0, 0, &x1, &y1, &w, &h);
-      int rightAlignedX = display.width() - rightMargin - w;
-
-      // Display days until (right-aligned)
-      display.setCursor((int16_t)rightAlignedX, (int16_t)yPos);
-      display.print(daysText);
-
-      // Display bin description on next line (smaller font)
-      display.setFont();  // Default font
-      const int subLineHeight = 3;
-      display.setCursor((int16_t)10, (int16_t)(yPos + subLineHeight));
-      display.print(binType);
-
-      display.setFont(&FreeMonoBold9pt7b);  // Back to main font
-      yPos += lineHeight + 8;
-
-      // Break if we're running out of space
-      if (yPos > display.height() - 20) break;
+      // Add spacing between day groups
+      yPos += groupSpacing;
     }
 
     // Footer with last update info and WiFi status
