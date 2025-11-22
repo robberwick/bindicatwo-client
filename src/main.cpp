@@ -383,15 +383,6 @@ void displayBinSchedule() {
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    // Title
-    // display.setFont(&FreeMonoBold9pt7b);
-    // display.setTextColor(GxEPD_BLACK);
-    // display.setCursor(10, 20);
-    // display.print("Bin Collection Schedule");
-    //
-    // // Draw line under title
-    // display.drawLine(10, 25, (int16_t)(display.width() - 10), 25, GxEPD_BLACK);
-
     // int yPos = 45;
     int yPos = 5;
 
@@ -419,8 +410,26 @@ void displayBinSchedule() {
       int binDescSpacing = groupIsNext ? 3 : 8;      // Spacing between bin type and description (more for default font)
       int groupSpacing = groupIsNext ? 8 : 3;        // Less spacing after subsequent groups
 
+      // Check if we should use inverted display (TODAY or TOMORROW for next collection)
+      bool useInverted = groupIsNext && (daysUntil <= 1) && display.epd2.hasColor;
+
+      // If inverted, calculate the height of the entire group and draw background rectangle
+      int groupStartY = yPos;
+      if (useInverted) {
+        // Calculate total height needed for this group
+        int headerHeight = 15 + 2 + headerSpacing;  // Space before + underline area + spacing after
+        int binsHeight = bins.size() * (binDescSpacing + 8);  // Each bin: spacing + description height
+        if (bins.size() > 1) {
+          binsHeight += (bins.size() - 1) * (lineHeight + binDescSpacing);  // Add spacing between multiple bins
+        }
+        int totalHeight = headerHeight + binsHeight - 4;
+
+        // Draw red filled rectangle as background
+        display.fillRect(5, groupStartY, (int16_t)(display.width() - 10), totalHeight, GxEPD_RED);
+      }
+
       // Display days header
-      auto textColour = groupIsNext && display.epd2.hasColor ? GxEPD_RED : GxEPD_BLACK;
+      auto textColour = useInverted ? GxEPD_WHITE : (groupIsNext && display.epd2.hasColor ? GxEPD_RED : GxEPD_BLACK);
       auto headerFont = groupIsNext ? &FreeMonoBold9pt7b : nullptr;
       auto binFont = groupIsNext ? &FreeMono9pt7b : nullptr;
       display.setFont(headerFont);
