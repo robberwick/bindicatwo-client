@@ -393,9 +393,7 @@ void displayBinSchedule() {
     // display.drawLine(10, 25, (int16_t)(display.width() - 10), 25, GxEPD_BLACK);
 
     // int yPos = 45;
-    int yPos = 20;
-    int lineHeight = 18;
-    int groupSpacing = 5;
+    int yPos = 5;
 
     // Display bins grouped by days
     for (const auto& entry : binsByDays) {
@@ -415,12 +413,27 @@ void displayBinSchedule() {
         }
       }
 
+      // Set spacing and fonts based on whether this is the next collection
+      int lineHeight = groupIsNext ? 18 : 14;        // Larger spacing for 9pt font, smaller for default font
+      int headerSpacing = groupIsNext ? 18 : 5;      // Spacing after header underline (less for smaller font)
+      int binDescSpacing = groupIsNext ? 3 : 8;      // Spacing between bin type and description (more for default font)
+      int groupSpacing = groupIsNext ? 8 : 3;        // Less spacing after subsequent groups
+
       // Display days header
       auto textColour = groupIsNext && display.epd2.hasColor ? GxEPD_RED : GxEPD_BLACK;
       auto headerFont = groupIsNext ? &FreeMonoBold9pt7b : nullptr;
       auto binFont = groupIsNext ? &FreeMono9pt7b : nullptr;
       display.setFont(headerFont);
       display.setTextColor(textColour);
+
+      // For custom fonts (9pt), yPos is baseline, so text drawn above
+      // For default font, yPos is top, so text drawn below
+      // Adjust yPos before setting cursor to prevent text clashing
+      if (groupIsNext) {
+        yPos += 15;  // Space before first group header (custom font needs space above baseline)
+      } else {
+        yPos += 8;   // Space before subsequent group headers (default font, less needed)
+      }
 
       display.setCursor(10, (int16_t)yPos);
 
@@ -431,28 +444,41 @@ void displayBinSchedule() {
       } else {
         display.print(String(daysUntil) + " DAYS");
       }
-      yPos = yPos + 2;
+
+      // For custom fonts, yPos is the baseline; for default font, it's the top
+      // Adjust accordingly for underline placement
+      if (groupIsNext) {
+        yPos = yPos + 2;  // Custom font: small gap after baseline
+      } else {
+        yPos = yPos + 8 + 2;  // Default font: font height (8px) + small gap
+      }
+
       display.drawLine(10, yPos, (int16_t)(display.width() - 10), yPos, textColour);
 
-      yPos += lineHeight;
+      yPos += headerSpacing;
 
       // Display all bins for this day
-      for (const auto& bin : bins) {
+      for (size_t i = 0; i < bins.size(); i++) {
+        const auto& bin = bins[i];
+
         // Check if we're running out of space
-        if (yPos > display.height() - 30) break;
+        if (yPos > display.height() - 20) break;
 
         display.setFont(binFont);
 
         display.setCursor(14, (int16_t)yPos);
         display.print(bin.type);
-        yPos += 3;
+        yPos += binDescSpacing;
 
         // Display bin description (smaller font)
         display.setFont();
         display.setCursor(15, (int16_t)yPos);
         display.print(bin.binType);
 
-        yPos += lineHeight + 3;
+        // Only add bin spacing if this is not the last bin in the group
+        if (i < bins.size() - 1) {
+          yPos += lineHeight + binDescSpacing;
+        }
       }
 
       // Add spacing between day groups
