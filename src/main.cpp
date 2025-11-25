@@ -431,7 +431,7 @@ void displayBinSchedule() {
       // Display days header
       auto textColour = useInverted ? GxEPD_WHITE : (groupIsNext && display.epd2.hasColor ? GxEPD_RED : GxEPD_BLACK);
       auto headerFont = groupIsNext ? &FreeMonoBold9pt7b : nullptr;
-      auto binFont = groupIsNext ? &FreeMono9pt7b : nullptr;
+      auto binFont = groupIsNext ? &FreeMonoBold9pt7b : nullptr;
       display.setFont(headerFont);
       display.setTextColor(textColour);
 
