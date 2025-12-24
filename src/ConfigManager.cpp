@@ -13,11 +13,40 @@ ConfigManager& ConfigManager::getInstance() {
 bool ConfigManager::begin() {
   Serial.println("ConfigManager: Initializing...");
 
-  // Mount LittleFS
+  // Mount LittleFS with recovery on failure
   if (!LittleFS.begin()) {
     Serial.println("ConfigManager: Failed to mount LittleFS");
-    return false;
+    Serial.println("ConfigManager: Attempting filesystem format and recovery...");
+
+    // Try to format the filesystem
+    if (LittleFS.format()) {
+      Serial.println("ConfigManager: Format successful, retrying mount...");
+
+      // Retry mount after format
+      if (LittleFS.begin()) {
+        Serial.println("ConfigManager: Mount successful after format");
+        // Create default config since filesystem was wiped
+        createDefaultConfig();
+
+        Serial.println("ConfigManager: Recovery complete - filesystem formatted and default config created");
+        Serial.printf("  API Key: %s\n", cache.apiKey.c_str());
+        Serial.printf("  UPRN: %s\n", cache.uprn.c_str());
+        Serial.printf("  Firmware Version: %s\n", cache.firmwareVersion.c_str());
+        Serial.printf("  Operating Mode: %s\n", cache.productionMode ? "Production" : "Development");
+
+        return cacheValid;
+      } else {
+        Serial.println("ConfigManager: FATAL - Mount failed even after format");
+        return false;
+      }
+    } else {
+      Serial.println("ConfigManager: FATAL - Format failed, filesystem may be hardware failure");
+      return false;
+    }
   }
+
+  // Normal path - filesystem mounted successfully
+  Serial.println("ConfigManager: LittleFS mounted successfully");
 
   // Check if config file exists
   if (!LittleFS.exists(CONFIG_FILE)) {
