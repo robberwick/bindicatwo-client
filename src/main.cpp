@@ -18,21 +18,10 @@
 #include <map>
 #include <vector>
 
+#include "ConfigManager.h"
+
 // Firmware version
 #define FIRMWARE_VERSION "0.0.1"
-
-// LittleFS configuration file path
-#define CONFIG_FILE "/config.json"
-
-// Operating mode enumeration
-enum OperatingMode {
-  DEVELOPMENT = 0,
-  PRODUCTION = 1
-};
-
-// Production/Development mode configuration
-// This will be read from config.json at runtime, defaulting to PRODUCTION mode
-OperatingMode OPERATING_MODE = PRODUCTION;
 
 // Sleep intervals (in microseconds)
 const uint64_t DEVELOPMENT_SLEEP_INTERVAL = 20ULL * 1000000;    // 20 seconds for development
@@ -73,16 +62,6 @@ void setupArduinoOTA();
 void reconnectWiFi();
 void performPeriodicUpdate();
 void enterDeepSleep();
-String getCurrentFirmwareVersion();
-void setCurrentFirmwareVersion(const String& version);
-void initializeConfig();
-String getLastUpdateString();
-void setLastUpdateString(const String& value);
-String getApiKey();
-void setApiKey(const String& apiKey);
-String getUprn();
-void setUprn(const String& uprn);
-String buildWebServiceURL();
 String formatUpdateTime(time_t t);
 bool syncNTP();
 
@@ -118,8 +97,8 @@ String fetchDataFromWebService() {
   WiFiClient client;
   HTTPClient http;
 
-  // Build URL with API key from EEPROM
-  String url = buildWebServiceURL();
+  // Build URL with API key from ConfigManager
+  String url = ConfigManager::getInstance().buildWebServiceURL();
   if (url.length() == 0) {
     Serial.println("Cannot build URL - API key not configured");
     return "";
@@ -141,7 +120,7 @@ String fetchDataFromWebService() {
     time_t now = time(nullptr);
     String timestamp = formatUpdateTime(now);
     Serial.printf("Storing last update time: %s\n", timestamp.c_str());
-    setLastUpdateString(timestamp);
+    ConfigManager::getInstance().setLastUpdateString(timestamp);
   } else {
     Serial.printf("HTTP error: %d\n", httpResponseCode);
   }
@@ -199,8 +178,8 @@ bool checkForFirmwareUpdate() {
     String latestVersion = http.getString();
     latestVersion.trim();
 
-    // Get the current running version (compile-time constant)
-    String currentVersion = getCurrentFirmwareVersion();
+    // Get the current running version from ConfigManager
+    String currentVersion = ConfigManager::getInstance().getFirmwareVersion();
 
     Serial.printf("Current version: %s\n", currentVersion.c_str());
     Serial.printf("Latest version: %s\n", latestVersion.c_str());
@@ -255,7 +234,7 @@ void performOTAUpdate() {
     // Update config.json with the new version before restart to prevent download loops
     if (targetVersion.length() > 0) {
       Serial.printf("Updating config.json with new version: %s\n", targetVersion.c_str());
-      setCurrentFirmwareVersion(targetVersion);
+      ConfigManager::getInstance().setFirmwareVersion(targetVersion);
       Serial.println("Config.json updated successfully before restart");
     }
 
@@ -499,11 +478,11 @@ void displayBinSchedule() {
     display.setTextColor(GxEPD_BLACK);
     display.setCursor(10, (int16_t)(display.height() - 10));
     display.print("Updated: ");
-    display.print(getLastUpdateString());
+    display.print(ConfigManager::getInstance().getLastUpdateString());
     display.print(" | ");
-    if (OPERATING_MODE == PRODUCTION) {
+    if (ConfigManager::getInstance().getOperatingMode() == PRODUCTION) {
       display.print("Version: ");
-      display.print(getCurrentFirmwareVersion());
+      display.print(ConfigManager::getInstance().getFirmwareVersion());
     } else {
       display.print("Mode: DEV");
     }
@@ -590,7 +569,7 @@ void performPeriodicUpdate() {
   updateCheckCounter++;
 
   // Check for updates every 10th wake up in production, every wake up in development
-  bool shouldCheckUpdates = OPERATING_MODE == PRODUCTION ? (updateCheckCounter % 10 == 0) : true;
+  bool shouldCheckUpdates = ConfigManager::getInstance().getOperatingMode() == PRODUCTION ? (updateCheckCounter % 10 == 0) : true;
 
   if (shouldCheckUpdates && checkForFirmwareUpdate()) {
     performOTAUpdate();
@@ -607,11 +586,12 @@ void performPeriodicUpdate() {
 
 void enterDeepSleep() {
   // Get the appropriate sleep interval based on mode
-  uint64_t sleepInterval = OPERATING_MODE == PRODUCTION ? PRODUCTION_SLEEP_INTERVAL : DEVELOPMENT_SLEEP_INTERVAL;
+  OperatingMode mode = ConfigManager::getInstance().getOperatingMode();
+  uint64_t sleepInterval = mode == PRODUCTION ? PRODUCTION_SLEEP_INTERVAL : DEVELOPMENT_SLEEP_INTERVAL;
 
   Serial.printf("Entering deep sleep for %llu seconds (%s mode)...\n",
                 sleepInterval / 1000000,
-                OPERATING_MODE == PRODUCTION ? "Production" : "Development");
+                mode == PRODUCTION ? "Production" : "Development");
 
   // Ensure all serial output is sent
   Serial.flush();
@@ -620,372 +600,21 @@ void enterDeepSleep() {
   ESP.deepSleep(sleepInterval);
 }
 
-// Configuration management functions
-void initializeConfig() {
-  Serial.println("Initializing configuration...");
-
-  // Check if the config file exists
-  if (!LittleFS.begin()) {
-    Serial.println("Failed to mount LittleFS");
-    return;
-  }
-
-  if (!LittleFS.exists(CONFIG_FILE)) {
-    Serial.println("Config file not found, creating default config");
-    File configFile = LittleFS.open(CONFIG_FILE, "w");
-    if (!configFile) {
-      Serial.println("Failed to create config file");
-      return;
-    }
-
-    // Write default config
-    JsonDocument doc;
-    doc["api_key"] = "your_api_key_here";
-    doc["uprn"] = "100081258147";
-    doc["firmware_version"] = FIRMWARE_VERSION;
-    doc["production_mode"] = false; // Default to development mode
-
-    // Serialize JSON to file
-    if (serializeJson(doc, configFile) == 0) {
-      Serial.println("Failed to write config file");
-    } else {
-      Serial.println("Default config written, please update API key");
-    }
-    configFile.close();
-  } else {
-    Serial.println("Config file found, reading config");
-    File configFile = LittleFS.open(CONFIG_FILE, "r");
-    if (!configFile) {
-      Serial.println("Failed to open config file");
-      return;
-    }
-
-    // Deserialize JSON from file
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, configFile);
-    if (error) {
-      Serial.println("Failed to parse config file");
-      configFile.close();
-      return;
-    }
-
-    // Read values from JSON
-    String apiKey = doc["api_key"];
-    String uprn = doc["uprn"];
-    String firmwareVersion = doc["firmware_version"];
-
-    Serial.printf("API Key: %s\n", apiKey.c_str());
-    Serial.printf("UPRN: %s\n", uprn.c_str());
-    Serial.printf("Firmware Version: %s\n", firmwareVersion.c_str());
-
-    // Read production mode setting
-    OPERATING_MODE = doc["production_mode"] ? PRODUCTION : DEVELOPMENT; // Default to PRODUCTION if not present
-
-    Serial.printf("Operating mode: %s\n", OPERATING_MODE == PRODUCTION ? "Production" : "Development");
-
-    configFile.close();
-  }
-}
-
-String getCurrentFirmwareVersion() {
-  // Read firmware version from config.json
-  if (!LittleFS.begin()) {
-    Serial.println("Failed to mount LittleFS in getCurrentFirmwareVersion");
-    return "0.0.0"; // Sentinel value
-  }
-
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file in getCurrentFirmwareVersion");
-    return "0.0.0"; // Sentinel value
-  }
-
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  configFile.close();
-
-  if (error) {
-    Serial.println("Failed to parse config file in getCurrentFirmwareVersion");
-    return "0.0.0"; // Sentinel value
-  }
-
-  // Get firmware version from config, default to sentinel value if not present
-  String version = doc["firmware_version"] | "0.0.0";
-  return version;
-}
-
-void setCurrentFirmwareVersion(const String& version) {
-  Serial.printf("Updating firmware version in config to: %s\n", version.c_str());
-
-  if (!LittleFS.begin()) {
-    Serial.println("Failed to mount LittleFS in setCurrentFirmwareVersion");
-    return;
-  }
-
-  // Read the existing config
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file in setCurrentFirmwareVersion");
-    return;
-  }
-
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  configFile.close();
-
-  if (error) {
-    Serial.println("Failed to parse config file in setCurrentFirmwareVersion");
-    return;
-  }
-
-  // Update firmware version
-  doc["firmware_version"] = version;
-
-  // Write the updated config
-  configFile = LittleFS.open(CONFIG_FILE, "w");
-  if (!configFile) {
-    Serial.println("Failed to open config file for writing in setCurrentFirmwareVersion");
-    return;
-  }
-
-  if (serializeJson(doc, configFile) == 0) {
-    Serial.println("Failed to write config file in setCurrentFirmwareVersion");
-  } else {
-    Serial.printf("Firmware version updated to %s in config.json\n", version.c_str());
-  }
-
-  configFile.close();
-}
-
-String getLastUpdateString() {
-  // Read last update time from config.json
-  if (!LittleFS.begin()) {
-    Serial.println("Failed to mount LittleFS in getLastUpdateString");
-    return "never";
-  }
-
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file in getLastUpdateString");
-    return "never";
-  }
-
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  configFile.close();
-
-  if (error) {
-    Serial.println("Failed to parse config file in getLastUpdateString");
-    return "never";
-  }
-
-  // Get last_update from config, default to "never" if not present
-  String lastUpdate = doc["last_update"] | "never";
-  return lastUpdate;
-}
-
-void setLastUpdateString(const String& value) {
-  Serial.printf("Storing last update time: %s\n", value.c_str());
-
-  if (!LittleFS.begin()) {
-    Serial.println("Failed to mount LittleFS in setLastUpdateString");
-    return;
-  }
-
-  // Read the existing config
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file in setLastUpdateString");
-    return;
-  }
-
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  configFile.close();
-
-  if (error) {
-    Serial.println("Failed to parse config file in setLastUpdateString");
-    return;
-  }
-
-  // Update last update time
-  doc["last_update"] = value;
-
-  // Write the updated config
-  configFile = LittleFS.open(CONFIG_FILE, "w");
-  if (!configFile) {
-    Serial.println("Failed to open config file for writing in setLastUpdateString");
-    return;
-  }
-
-  if (serializeJson(doc, configFile) == 0) {
-    Serial.println("Failed to write config file in setLastUpdateString");
-  } else {
-    Serial.printf("Last update time saved to config.json: %s\n", value.c_str());
-  }
-
-  configFile.close();
-}
-
-String getApiKey() {
-  // Return the API key from the config file
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file");
-    return "";
-  }
-
-  // Deserialize JSON from file
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  if (error) {
-    Serial.println("Failed to parse config file");
-    configFile.close();
-    return "";
-  }
-
-  String apiKey = doc["api_key"];
-  configFile.close();
-  return apiKey;
-}
-
-void setApiKey(const String& apiKey) {
-  Serial.printf("Storing API key in config: %s\n", apiKey.c_str());
-
-  // Read the existing config
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file");
-    return;
-  }
-
-  // Deserialize JSON from file
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  configFile.close();
-
-  if (error) {
-    Serial.println("Failed to parse config file");
-    return;
-  }
-
-  // Update API key
-  doc["api_key"] = apiKey;
-
-  // Write the updated config
-  configFile = LittleFS.open(CONFIG_FILE, "w");
-  if (!configFile) {
-    Serial.println("Failed to open config file for writing");
-    return;
-  }
-
-  // Serialize JSON to file
-  if (serializeJson(doc, configFile) == 0) {
-    Serial.println("Failed to write config file");
-  } else {
-    Serial.println("API key updated successfully");
-  }
-
-  configFile.close();
-}
-
-String getUprn() {
-  // Return the UPRN from the config file
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file");
-    return "";
-  }
-
-  // Deserialize JSON from file
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  if (error) {
-    Serial.println("Failed to parse config file");
-    configFile.close();
-    return "";
-  }
-
-  String uprn = doc["uprn"];
-  configFile.close();
-  return uprn;
-}
-
-void setUprn(const String& uprn) {
-  Serial.printf("Storing UPRN in config: %s\n", uprn.c_str());
-
-  // Read the existing config
-  File configFile = LittleFS.open(CONFIG_FILE, "r");
-  if (!configFile) {
-    Serial.println("Failed to open config file");
-    return;
-  }
-
-  // Deserialize JSON from file
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, configFile);
-  configFile.close();
-
-  if (error) {
-    Serial.println("Failed to parse config file");
-    return;
-  }
-
-  // Update UPRN
-  doc["uprn"] = uprn;
-
-  // Write the updated config
-  configFile = LittleFS.open(CONFIG_FILE, "w");
-  if (!configFile) {
-    Serial.println("Failed to open config file for writing");
-    return;
-  }
-
-  // Serialize JSON to file
-  if (serializeJson(doc, configFile) == 0) {
-    Serial.println("Failed to write config file");
-  } else {
-    Serial.println("UPRN updated successfully");
-  }
-
-  configFile.close();
-}
-
-String buildWebServiceURL() {
-  // Get API key and UPRN from config
-  String apiKey = getApiKey();
-  String uprn = getUprn();
-
-  if (apiKey.length() == 0) {
-    Serial.println("Error: API key not configured");
-    return "";
-  }
-
-  if (uprn.length() == 0) {
-    Serial.println("Error: UPRN not configured");
-    return "";
-  }
-
-  // Base URL with UPRN in the path
-  String baseUrl = "http://bindicator.berwick.me.uk/schedule/";
-
-  // Build the complete URL: baseUrl + uprn + "/?api_key=" + apiKey
-  String url = baseUrl + uprn + "/?api_key=" + apiKey;
-
-  return url;
-}
-
 void setup() {
   Serial.begin(115200);
   Serial.println("Starting Bin Schedule Display...");
   Serial.printf("Firmware version: %s\n", FIRMWARE_VERSION);
-  Serial.printf("Running in %s mode\n", OPERATING_MODE == PRODUCTION ? "Production" : "Development");
+
+  // CRITICAL: Initialize ConfigManager first
+  if (!ConfigManager::getInstance().begin()) {
+    Serial.println("FATAL: Config initialization failed");
+    ESP.restart();
+  }
+
+  Serial.printf("Running in %s mode\n", ConfigManager::getInstance().getOperatingMode() == PRODUCTION ? "Production" : "Development");
 
   display.init(115200, true, 50, false);
   display.setRotation(3); // enforce 180-degree rotation globally
-
-  // Initialize configuration
-  initializeConfig();
 
   // Check if this is a wake up from deep sleep
   rst_info *resetInfo = ESP.getResetInfoPtr();
@@ -1003,7 +632,7 @@ void setup() {
     syncNTP();
 
     // Setup Arduino OTA for development updates (only in development mode)
-    if (OPERATING_MODE == DEVELOPMENT) {
+    if (ConfigManager::getInstance().getOperatingMode() == DEVELOPMENT) {
       setupArduinoOTA();
     }
 
@@ -1025,7 +654,7 @@ void setup() {
 void loop() {
   // This should never be reached when using deep sleep
   // Only used in development mode when deep sleep might be disabled for debugging
-  if (OPERATING_MODE == DEVELOPMENT) {
+  if (ConfigManager::getInstance().getOperatingMode() == DEVELOPMENT) {
     // Handle Arduino OTA in development mode
     ArduinoOTA.handle();
     delay(1000);
