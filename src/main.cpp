@@ -27,7 +27,10 @@ void performPeriodicUpdate() {
   NetworkManager::getInstance().reconnectWiFi();
 
   // Re-sync NTP after wake for accurate time
-  NetworkManager::getInstance().syncNTP();
+  if (!NetworkManager::getInstance().syncNTP()) {
+    Serial.println("WARNING: NTP sync failed, time may be inaccurate");
+    // Continue operation - don't block on NTP failure
+  }
 
   // Check for firmware updates (less frequently in production)
   static int updateCheckCounter = 0;
@@ -109,7 +112,10 @@ void setup() {
     NetworkManager::getInstance().setupWiFi();
 
     // Sync NTP time on boot
-    NetworkManager::getInstance().syncNTP();
+    if (!NetworkManager::getInstance().syncNTP()) {
+      Serial.println("WARNING: NTP sync failed, time may be inaccurate");
+      // Continue operation - don't block on NTP failure
+    }
 
     // Setup Arduino OTA for development updates (only in development mode)
     if (ConfigManager::getInstance().getOperatingMode() == DEVELOPMENT) {
