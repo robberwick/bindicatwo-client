@@ -186,6 +186,75 @@ String ConfigManager::buildWebServiceURL() const {
   return url;
 }
 
+// Validation methods
+
+ValidationResult ConfigManager::validateConfig() const {
+  // Check API key validity
+  if (!isApiKeyValid()) {
+    if (cache.apiKey.length() == 0) {
+      return {false, "API key not set"};
+    } else if (cache.apiKey == "your_api_key_here") {
+      return {false, "API key is placeholder"};
+    } else {
+      return {false, "API key invalid"};
+    }
+  }
+
+  // Check UPRN validity
+  if (!isUprnValid()) {
+    if (cache.uprn.length() == 0) {
+      return {false, "UPRN not set"};
+    } else if (cache.uprn.length() < 10 || cache.uprn.length() > 15) {
+      return {false, "UPRN wrong length"};
+    } else {
+      return {false, "UPRN not numeric"};
+    }
+  }
+
+  // All validation passed
+  return {true, ""};
+}
+
+bool ConfigManager::isApiKeyValid() const {
+  // API key should not be empty
+  if (cache.apiKey.length() == 0) {
+    return false;
+  }
+
+  // API key should not be the placeholder value
+  if (cache.apiKey == "your_api_key_here") {
+    return false;
+  }
+
+  // API key should be reasonable length (typical API keys are 16-64 characters)
+  if (cache.apiKey.length() < 8 || cache.apiKey.length() > 128) {
+    return false;
+  }
+
+  return true;
+}
+
+bool ConfigManager::isUprnValid() const {
+  // UPRN should not be empty
+  if (cache.uprn.length() == 0) {
+    return false;
+  }
+
+  // UPRN should be between 10-15 digits (UK UPRNs are typically 12 digits)
+  if (cache.uprn.length() < 10 || cache.uprn.length() > 15) {
+    return false;
+  }
+
+  // UPRN should be numeric
+  for (size_t i = 0; i < cache.uprn.length(); i++) {
+    if (!isDigit(cache.uprn[i])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // Setters - update cache and save to filesystem
 
 void ConfigManager::setApiKey(const String& key) {

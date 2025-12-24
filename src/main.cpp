@@ -94,6 +94,24 @@ void setup() {
   // Initialize DisplayManager
   DisplayManager::getInstance().begin();
 
+  // Validate configuration
+  ValidationResult validation = ConfigManager::getInstance().validateConfig();
+  if (!validation.valid) {
+    Serial.printf("FATAL: Configuration validation failed - %s\n", validation.errorMessage.c_str());
+    DisplayManager::getInstance().showError(validation.errorMessage.c_str());
+    DisplayManager::getInstance().hibernate();
+
+    // Stay awake to allow user to see error and reconfigure
+    // In production, this prevents deep sleep with invalid config
+    Serial.println("Device halted due to invalid configuration");
+    Serial.println("Please update config.json and restart device");
+    while (true) {
+      delay(1000);
+    }
+  }
+
+  Serial.println("Configuration validation passed");
+
   // Set up FirmwareManager display callback
   FirmwareManager::getInstance().setDisplayCallback([](const char* msg) {
     DisplayManager::getInstance().showUpdateStatus(msg);

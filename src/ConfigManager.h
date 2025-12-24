@@ -10,6 +10,16 @@ enum OperatingMode {
 };
 
 /**
+ * ValidationResult - Result of configuration validation
+ *
+ * Contains validation status and error message if invalid.
+ */
+struct ValidationResult {
+  bool valid;
+  String errorMessage;
+};
+
+/**
  * ConfigManager - Singleton class for managing device configuration
  *
  * Provides in-memory caching of configuration to minimize filesystem I/O.
@@ -37,6 +47,11 @@ public:
 
   // Utility method to build web service URL from config
   String buildWebServiceURL() const;
+
+  // Validation methods
+  ValidationResult validateConfig() const;
+  bool isApiKeyValid() const;
+  bool isUprnValid() const;
 
   // Setters - update cache and save to filesystem
   void setApiKey(const String& key);
