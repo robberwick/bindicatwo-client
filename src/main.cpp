@@ -8,6 +8,7 @@
 #include "DisplayManager.h"
 #include "NetworkManager.h"
 #include "FirmwareManager.h"
+#include "OTARecovery.h"
 
 // Firmware version
 #define FIRMWARE_VERSION "0.0.1"
@@ -33,11 +34,12 @@ void performPeriodicUpdate() {
   }
 
   // Check for firmware updates (less frequently in production)
-  static int updateCheckCounter = 0;
-  updateCheckCounter++;
+  // FIXED: Use RTC-persisted counter instead of static (which resets every wake)
+  OTARecovery::getInstance().incrementUpdateCheckCounter();
 
   // Check for updates every 10th wake up in production, every wake up in development
-  bool shouldCheckUpdates = ConfigManager::getInstance().getOperatingMode() == PRODUCTION ? (updateCheckCounter % 10 == 0) : true;
+  bool shouldCheckUpdates = ConfigManager::getInstance().getOperatingMode() == PRODUCTION ?
+                           (OTARecovery::getInstance().getUpdateCheckCounter() % 10 == 0) : true;
 
   if (shouldCheckUpdates && FirmwareManager::getInstance().checkForUpdate()) {
     FirmwareManager::getInstance().performHTTPUpdate();
@@ -90,6 +92,56 @@ void setup() {
   }
 
   Serial.printf("Running in %s mode\n", ConfigManager::getInstance().getOperatingMode() == PRODUCTION ? "Production" : "Development");
+
+  // Initialize OTA Recovery (must be early to track boots and handle rollback)
+  OTARecovery::getInstance().begin();
+
+  // CRITICAL: Boot stability check for OTA rollback
+  if (OTARecovery::getInstance().isUpdateInProgress()) {
+    OTARecovery::getInstance().incrementBootCount();
+
+    Serial.printf("OTA update in progress - boot %u of %u required for stability\n",
+                  OTARecovery::getInstance().getBootCount(),
+                  MIN_STABLE_BOOTS);
+
+    // Check for boot loop (too many failed boots)
+    if (OTARecovery::getInstance().hasExceededMaxBootFailures()) {
+      Serial.println("CRITICAL: Boot loop detected - max boot failures exceeded!");
+
+      // Rollback to previous version
+      String previousVersion = OTARecovery::getInstance().getPreviousVersion();
+      Serial.printf("Rolling back to previous version: %s\n", previousVersion.c_str());
+
+      ConfigManager::getInstance().setFirmwareVersion(previousVersion);
+      ConfigManager::getInstance().setUpdatePending(false);
+
+      OTARecovery::getInstance().markUpdateComplete();
+
+      // Show error on display after initializing it
+      DisplayManager::getInstance().begin();
+      DisplayManager::getInstance().showError("Update failed - rolled back");
+      DisplayManager::getInstance().hibernate();
+
+      Serial.println("Rollback complete, continuing with previous version");
+
+    } else if (OTARecovery::getInstance().getBootCount() >= MIN_STABLE_BOOTS) {
+      // Update is stable - commit the new version
+      Serial.println("Update stability confirmed - committing new version");
+
+      String targetVersion = OTARecovery::getInstance().getTargetVersion();
+      Serial.printf("Committing firmware version: %s\n", targetVersion.c_str());
+
+      ConfigManager::getInstance().setFirmwareVersion(targetVersion);
+      ConfigManager::getInstance().setUpdatePending(false);
+
+      OTARecovery::getInstance().markUpdateComplete();
+
+      Serial.println("Firmware update completed successfully!");
+    } else {
+      // Still testing stability - continue booting
+      Serial.println("Update in progress - continuing boot for stability test");
+    }
+  }
 
   // Initialize DisplayManager
   DisplayManager::getInstance().begin();

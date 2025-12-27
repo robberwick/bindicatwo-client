@@ -44,6 +44,8 @@ public:
   String getFirmwareVersion() const;
   String getLastUpdateString() const;
   OperatingMode getOperatingMode() const;
+  String getPreviousVersion() const;
+  bool isUpdatePending() const;
 
   // Utility method to build web service URL from config
   String buildWebServiceURL() const;
@@ -58,6 +60,8 @@ public:
   void setUprn(const String& uprn);
   void setFirmwareVersion(const String& version);
   void setLastUpdateString(const String& timestamp);
+  void setPreviousVersion(const String& version);
+  void setUpdatePending(bool pending);
 
   // Prevent copying
   ConfigManager(const ConfigManager&) = delete;
@@ -74,6 +78,8 @@ private:
     String firmwareVersion;
     String lastUpdate;
     bool productionMode;
+    String previousVersion;
+    bool updatePending;
   } cache;
 
   bool cacheValid = false;

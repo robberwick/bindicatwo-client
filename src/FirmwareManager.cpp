@@ -1,5 +1,6 @@
 #include "FirmwareManager.h"
 #include "ConfigManager.h"
+#include "OTARecovery.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
@@ -60,12 +61,14 @@ void FirmwareManager::performHTTPUpdate() {
     displayCallback("Downloading...");
   }
 
-  // First, get the version we're about to download so we can store it in config.json after successful update
+  // Get the current version and target version
+  String currentVersion = ConfigManager::getInstance().getFirmwareVersion();
+
   WiFiClient versionClient;
   HTTPClient versionHttp;
   String targetVersion = "";
 
-  Serial.println("FirmwareManager: Getting target version to store in config.json...");
+  Serial.println("FirmwareManager: Getting target version for OTA rollback setup...");
   versionHttp.begin(versionClient, FIRMWARE_VERSION_URL);
   int versionResponse = versionHttp.GET();
   if (versionResponse == 200) {
@@ -75,12 +78,26 @@ void FirmwareManager::performHTTPUpdate() {
   }
   versionHttp.end();
 
+  // CRITICAL: Prepare for OTA with rollback support
+  // Mark update as in progress and save rollback information BEFORE downloading
+  Serial.println("FirmwareManager: Preparing OTA rollback safety net...");
+  OTARecovery::getInstance().markUpdateStart(currentVersion, targetVersion);
+
+  // Save previous version to config for potential rollback
+  ConfigManager::getInstance().setPreviousVersion(currentVersion);
+
+  // Mark update as pending - version will only be committed after stable boots
+  ConfigManager::getInstance().setUpdatePending(true);
+
+  Serial.printf("FirmwareManager: Rollback prepared - current: %s, target: %s\n",
+                currentVersion.c_str(), targetVersion.c_str());
+
   WiFiClient client;
 
   // Configure the HTTP update
   ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
 
-  // Store callback and version in variables for lambda capture
+  // Store callback in variable for lambda capture
   auto callback = displayCallback;
 
   ESPhttpUpdate.onStart([callback]() {
@@ -90,15 +107,13 @@ void FirmwareManager::performHTTPUpdate() {
     }
   });
 
-  ESPhttpUpdate.onEnd([targetVersion]() {
+  ESPhttpUpdate.onEnd([]() {
     Serial.println("FirmwareManager: OTA Update finished successfully");
 
-    // Update config.json with the new version before restart to prevent download loops
-    if (targetVersion.length() > 0) {
-      Serial.printf("FirmwareManager: Updating config.json with new version: %s\n", targetVersion.c_str());
-      ConfigManager::getInstance().setFirmwareVersion(targetVersion);
-      Serial.println("FirmwareManager: Config.json updated successfully before restart");
-    }
+    // DO NOT update firmware_version here!
+    // Version will be committed only after boot stability check in main.cpp
+    // This prevents boot loops from buggy firmware
+    Serial.println("FirmwareManager: Update pending - version will commit after stable boots");
   });
 
   ESPhttpUpdate.onProgress([](int cur, int total) {

@@ -35,6 +35,9 @@ public:
   int16_t getWidth() const;
   int16_t getHeight() const;
 
+  // Debug: Dump framebuffer to serial as hex (for remote layout debugging)
+  void dumpFramebufferToSerial();
+
   // Prevent copying
   DisplayManager(const DisplayManager&) = delete;
   DisplayManager& operator=(const DisplayManager&) = delete;
@@ -42,6 +45,9 @@ public:
 private:
   // Private constructor for singleton
   DisplayManager();
+
+  // Helper methods
+  String truncateText(const String& text, int maxWidth, const GFXfont* font = nullptr);
 
   // Display hardware instance (created in begin())
   GxEPD2_3C<GxEPD2_290_C90c, GxEPD2_290_C90c::HEIGHT>* display = nullptr;

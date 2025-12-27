@@ -91,6 +91,8 @@ void ConfigManager::loadFromFilesystem() {
   cache.firmwareVersion = doc["firmware_version"] | DEFAULT_FIRMWARE_VERSION;
   cache.lastUpdate = doc["last_update"] | "never";
   cache.productionMode = doc["production_mode"] | true;  // Default to production for safety
+  cache.previousVersion = doc["previous_version"] | "";
+  cache.updatePending = doc["update_pending"] | false;
 
   cacheValid = true;
   Serial.println("ConfigManager: Config loaded into cache");
@@ -111,6 +113,8 @@ void ConfigManager::saveToFilesystem() {
   doc["firmware_version"] = cache.firmwareVersion;
   doc["last_update"] = cache.lastUpdate;
   doc["production_mode"] = cache.productionMode;
+  doc["previous_version"] = cache.previousVersion;
+  doc["update_pending"] = cache.updatePending;
 
   // Write to file
   File configFile = LittleFS.open(CONFIG_FILE, "w");
@@ -135,6 +139,8 @@ void ConfigManager::createDefaultConfig() {
   cache.firmwareVersion = DEFAULT_FIRMWARE_VERSION;
   cache.lastUpdate = "never";
   cache.productionMode = false;  // Default to development for initial setup
+  cache.previousVersion = "";
+  cache.updatePending = false;
 
   cacheValid = true;
 
@@ -164,6 +170,14 @@ String ConfigManager::getLastUpdateString() const {
 
 OperatingMode ConfigManager::getOperatingMode() const {
   return cache.productionMode ? PRODUCTION : DEVELOPMENT;
+}
+
+String ConfigManager::getPreviousVersion() const {
+  return cache.previousVersion;
+}
+
+bool ConfigManager::isUpdatePending() const {
+  return cache.updatePending;
 }
 
 String ConfigManager::buildWebServiceURL() const {
@@ -278,5 +292,17 @@ void ConfigManager::setFirmwareVersion(const String& version) {
 void ConfigManager::setLastUpdateString(const String& timestamp) {
   Serial.printf("ConfigManager: Setting last update to: %s\n", timestamp.c_str());
   cache.lastUpdate = timestamp;
+  saveToFilesystem();
+}
+
+void ConfigManager::setPreviousVersion(const String& version) {
+  Serial.printf("ConfigManager: Setting previous version to: %s\n", version.c_str());
+  cache.previousVersion = version;
+  saveToFilesystem();
+}
+
+void ConfigManager::setUpdatePending(bool pending) {
+  Serial.printf("ConfigManager: Setting update pending to: %s\n", pending ? "true" : "false");
+  cache.updatePending = pending;
   saveToFilesystem();
 }
