@@ -1,9 +1,9 @@
 #include "FirmwareManager.h"
 #include "ConfigManager.h"
 #include "OTARecovery.h"
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <ESP8266httpUpdate.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <HTTPUpdate.h>
 #include <ArduinoOTA.h>
 #include <WiFiClient.h>
 
@@ -94,20 +94,20 @@ void FirmwareManager::performHTTPUpdate() {
 
   WiFiClient client;
 
-  // Configure the HTTP update
-  ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
+  // Configure the HTTP update (ESP32 API)
+  httpUpdate.setLedPin(LED_BUILTIN, LOW);
 
   // Store callback in variable for lambda capture
   auto callback = displayCallback;
 
-  ESPhttpUpdate.onStart([callback]() {
+  httpUpdate.onStart([callback]() {
     Serial.println("FirmwareManager: OTA Update started");
     if (callback) {
       callback("Installing...");
     }
   });
 
-  ESPhttpUpdate.onEnd([]() {
+  httpUpdate.onEnd([]() {
     Serial.println("FirmwareManager: OTA Update finished successfully");
 
     // DO NOT update firmware_version here!
@@ -116,12 +116,12 @@ void FirmwareManager::performHTTPUpdate() {
     Serial.println("FirmwareManager: Update pending - version will commit after stable boots");
   });
 
-  ESPhttpUpdate.onProgress([](int cur, int total) {
+  httpUpdate.onProgress([](int cur, int total) {
     Serial.printf("FirmwareManager: OTA Progress: %u%%\n", (unsigned int)((cur * 100) / total));
   });
 
-  ESPhttpUpdate.onError([callback](int error) {
-    Serial.printf("FirmwareManager: OTA Error: %s\n", ESPhttpUpdate.getLastErrorString().c_str());
+  httpUpdate.onError([callback](int error) {
+    Serial.printf("FirmwareManager: OTA Error: %s\n", httpUpdate.getLastErrorString().c_str());
     if (callback) {
       callback("Update failed");
     }
@@ -129,13 +129,13 @@ void FirmwareManager::performHTTPUpdate() {
 
   // Perform the update
   Serial.println("FirmwareManager: Starting HTTP OTA update...");
-  t_httpUpdate_return ret = ESPhttpUpdate.update(client, FIRMWARE_DOWNLOAD_URL);
+  t_httpUpdate_return ret = httpUpdate.update(client, FIRMWARE_DOWNLOAD_URL);
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
       Serial.printf("FirmwareManager: HTTP OTA failed (%d): %s\n",
-                    ESPhttpUpdate.getLastError(),
-                    ESPhttpUpdate.getLastErrorString().c_str());
+                    httpUpdate.getLastError(),
+                    httpUpdate.getLastErrorString().c_str());
       if (displayCallback) {
         displayCallback("Update failed");
       }
@@ -170,7 +170,7 @@ void FirmwareManager::setupArduinoOTA() {
     String type;
     if (ArduinoOTA.getCommand() == U_FLASH) {
       type = "sketch";
-    } else { // U_SPIFFS
+    } else { // U_FS (filesystem - ESP32 uses U_FS instead of U_SPIFFS)
       type = "filesystem";
     }
     Serial.println("FirmwareManager: Start updating " + type);

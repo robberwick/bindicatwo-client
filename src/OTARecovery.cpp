@@ -1,7 +1,7 @@
 #include "OTARecovery.h"
 
-// RTC memory address for our data (block 64-96 are user-available)
-#define RTC_MEMORY_BLOCK 64
+// ESP32 RTC memory persists across deep sleep (but not full power cycles)
+RTC_DATA_ATTR OTARecoveryData rtcData = {0};
 
 OTARecovery& OTARecovery::getInstance() {
   static OTARecovery instance;
@@ -22,33 +22,26 @@ void OTARecovery::begin() {
 void OTARecovery::initializeRTCMemory() {
   Serial.println("OTARecovery: Initializing fresh RTC memory");
 
-  memset(&data, 0, sizeof(data));
-  data.magic = OTA_RECOVERY_MAGIC;
-  data.bootCount = 0;
-  data.updateCheckCounter = 0;
-  data.updateInProgress = false;
-  data.failedBootCount = 0;
-  data.lastNTPSync = 0;
+  memset(&rtcData, 0, sizeof(rtcData));
+  rtcData.magic = OTA_RECOVERY_MAGIC;
+  rtcData.bootCount = 0;
+  rtcData.updateCheckCounter = 0;
+  rtcData.updateInProgress = false;
+  rtcData.failedBootCount = 0;
+  rtcData.lastNTPSync = 0;
 
-  saveRTCMemory();
+  data = rtcData;
 }
 
 void OTARecovery::validateAndLoadRTCMemory() {
-  // Calculate number of 4-byte blocks needed
-  uint32_t rtcSize = (sizeof(OTARecoveryData) + 3) / 4;
-
-  // Read from RTC memory
-  if (ESP.rtcUserMemoryRead(RTC_MEMORY_BLOCK, (uint32_t*)&data, rtcSize)) {
-    // Validate magic number
-    if (data.magic == OTA_RECOVERY_MAGIC) {
-      Serial.println("OTARecovery: Valid RTC memory found");
-      return;
-    } else {
-      Serial.printf("OTARecovery: Invalid magic (0x%08X), expected 0x%08X\n",
-                    data.magic, OTA_RECOVERY_MAGIC);
-    }
+  // Check if RTC memory is valid (magic number check)
+  if (rtcData.magic == OTA_RECOVERY_MAGIC) {
+    Serial.println("OTARecovery: Valid RTC memory found");
+    data = rtcData;
+    return;
   } else {
-    Serial.println("OTARecovery: Failed to read RTC memory");
+    Serial.printf("OTARecovery: Invalid magic (0x%08X), expected 0x%08X\n",
+                  rtcData.magic, OTA_RECOVERY_MAGIC);
   }
 
   // If we get here, RTC memory is invalid - initialize fresh
@@ -56,11 +49,8 @@ void OTARecovery::validateAndLoadRTCMemory() {
 }
 
 void OTARecovery::saveRTCMemory() {
-  uint32_t rtcSize = (sizeof(OTARecoveryData) + 3) / 4;
-
-  if (!ESP.rtcUserMemoryWrite(RTC_MEMORY_BLOCK, (uint32_t*)&data, rtcSize)) {
-    Serial.println("OTARecovery: WARNING - Failed to write RTC memory");
-  }
+  // Copy data to RTC memory
+  rtcData = data;
 }
 
 // Boot tracking

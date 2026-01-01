@@ -1,8 +1,8 @@
 #include "NetworkManager.h"
 #include "ConfigManager.h"
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <WiFiManager.h>
-#include <ESP8266HTTPClient.h>
+#include <HTTPClient.h>
 #include <WiFiClient.h>
 #include <time.h>
 
@@ -181,7 +181,8 @@ HttpResult NetworkManager::performHttpGet(const String& url) {
     // HTTP error codes are negative for library errors
     Serial.printf("NetworkManager: HTTP error: %s\n", http.errorToString(httpCode).c_str());
 
-    if (httpCode == HTTPC_ERROR_CONNECTION_FAILED ||
+    // ESP32 HTTPClient uses HTTPC_ERROR_CONNECTION_REFUSED instead of HTTPC_ERROR_CONNECTION_FAILED
+    if (httpCode == HTTPC_ERROR_CONNECTION_REFUSED ||
         httpCode == HTTPC_ERROR_CONNECTION_LOST) {
       result.error = HttpError::CONNECTION_FAILED;
       result.shouldRetry = true;

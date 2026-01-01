@@ -1,10 +1,10 @@
 # Bindicator Client
 
-An ESP8266-based e-paper display for showing upcoming [North Herts Council](https://www.north-herts.gov.uk/find-your-bin-collection-day) bin collection schedules. 
+An ESP32-S3-based e-paper display for showing upcoming [North Herts Council](https://www.north-herts.gov.uk/find-your-bin-collection-day) bin collection schedules.
 The device connects to a web service to fetch bin collection data and displays it on a 2.9" tri-color e-ink display, with automatic firmware updates and deep sleep for low power consumption.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Platform](https://img.shields.io/badge/platform-ESP8266-blue.svg)
+![Platform](https://img.shields.io/badge/platform-ESP32--S3-blue.svg)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-compatible-orange.svg)
 
 ## Features
@@ -20,29 +20,29 @@ The device connects to a web service to fetch bin collection data and displays i
 
 ## Hardware Requirements
 
-- **ESP8266 Board** (Wemos D1 Mini or similar)
+- **ESP32-S3 Board** (Wemos S3 Mini or similar)
 - **2.9" E-Paper Display Module** (GDEM029C90, 128x296, tri-color)
 - **Power Supply** (USB or battery)
 
 ### Pin Connections
 
-| E-Paper Pin | Color (Harness) | ESP8266 Pin | GPIO |
-|-------------|-----------------|-------------|------|
-| BUSY        | Purple          | D6          | 12   |
-| RST         | Orange          | D1          | 5    |
-| DC          | White           | D2          | 4    |
-| CS          | Blue            | D8          | 15   |
-| SCL/SCK     | Green           | D5          | 14   |
-| SDA/MOSI    | Yellow          | D7          | 13   |
-| GND         | Black           | GND         | -    |
-| VCC         | Red             | 3.3V        | -    |
+| E-Paper Pin | Color (Harness) | ESP32-S3 Pin | GPIO |
+|-------------|-----------------|--------------|------|
+| BUSY        | Purple          | GPIO13       | 13   |
+| RST         | Orange          | GPIO12       | 12   |
+| DC          | White           | GPIO11       | 11   |
+| CS          | Blue            | GPIO10       | 10   |
+| SCL/SCK     | Green           | GPIO7        | 7    |
+| SDA/MOSI    | Yellow          | GPIO6        | 6    |
+| GND         | Black           | GND          | -    |
+| VCC         | Red             | 3.3V         | -    |
 
-**Important**: Connect D0 to RST with a jumper to enable deep sleep wake-up.
+**Note**: ESP32-S3 uses internal timer wake for deep sleep (no external jumper required). The GPIOs are carefully selected to avoid strapping pins and USB conflicts.
 
 ## Software Requirements
 
 - [PlatformIO](https://platformio.org/) (recommended) or Arduino IDE
-- USB drivers for your ESP8266 board
+- USB drivers for your ESP32-S3 board (typically USB-C native, no external driver needed)
 
 ## Quick Start
 
@@ -65,16 +65,18 @@ Edit `data/config.json` with your settings:
 - `firmware_version`: Set to `"0.0.0"` for first boot (triggers automatic firmware update)
 - `production_mode`: `false` for development (20s sleep), `true` for production (3h sleep)
 
-### 2. Upload Filesystem to ESP8266
+### 2. Upload Filesystem to ESP32-S3
 
 Using PlatformIO:
 ```bash
 pio run --target uploadfs
 ```
 
-This uploads the `data/` folder (containing `config.json`) to the ESP8266's LittleFS filesystem.
+This uploads the `data/` folder (containing `config.json`) to the ESP32-S3's LittleFS filesystem.
 
-**Important**: The filesystem must be uploaded before the firmware, as the device reads configuration on boot.
+**Important**:
+- The filesystem must be uploaded before the firmware, as the device reads configuration on boot.
+- For ESP32-S3, ensure the device is in download mode by holding the BOOT button while pressing RESET when connecting via USB.
 
 ### 3. Upload Firmware
 
@@ -110,7 +112,7 @@ On first boot, the device will:
 
 - **Firmware version `"0.0.0"` is a sentinel value** that ensures the device updates to the latest firmware on first boot
 - The device will only attempt WiFi configuration if credentials aren't already saved
-- WiFi credentials persist in ESP8266 flash memory (separate from LittleFS)
+- WiFi credentials persist in ESP32-S3 flash memory (separate from LittleFS)
 - If no `config.json` exists on the filesystem, the device creates a default one with placeholder values
 
 ## Configuration

@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Bindicator Client is an ESP8266-based e-paper display showing upcoming bin collection schedules for North Herts Council. The device fetches data from a web service and displays it on a 2.9" tri-color e-ink display with automatic firmware updates and deep sleep for low power consumption.
+Bindicator Client is an ESP32-S3-based e-paper display showing upcoming bin collection schedules for North Herts Council. The device fetches data from a web service and displays it on a 2.9" tri-color e-ink display with automatic firmware updates and deep sleep for low power consumption.
 
-**Hardware:** ESP8266 (Wemos D1 Mini) + 2.9" E-Paper Display (GDEM029C90, 128x296, tri-color)
+**Hardware:** ESP32-S3 (Wemos S3 Mini) + 2.9" E-Paper Display (GDEM029C90, 128x296, tri-color)
 
 **Key Technologies:**
-- Platform: ESP8266 (Arduino framework)
+- Platform: ESP32-S3 (Arduino framework)
 - Build System: PlatformIO
 - Display: GxEPD2 library for e-paper control
 - Configuration: LittleFS filesystem with JSON config
@@ -89,9 +89,9 @@ pio run --target upload --upload-port 192.168.1.100
 
 ### LittleFS Configuration File
 
-The project uses `data/config.json` stored on the ESP8266's LittleFS filesystem. This file is the source of truth for all runtime configuration.
+The project uses `data/config.json` stored on the ESP32-S3's LittleFS filesystem. This file is the source of truth for all runtime configuration.
 
-**Important:** Always upload the filesystem (`pio run --target uploadfs`) before uploading firmware, especially on first boot.
+**Important:** Always upload the filesystem (`pio run --target uploadfs`) before uploading firmware, especially on first boot. For ESP32-S3, ensure the device is in download mode (hold BOOT button while pressing RESET) when uploading via USB.
 
 ### Configuration Structure
 
@@ -213,9 +213,9 @@ The device operates in a deep sleep cycle with two execution paths:
 - Text color: white for inverted, red/black for normal
 
 **Deep Sleep** (src/main.cpp:608-621):
-- `enterDeepSleep()`: Put ESP8266 in deep sleep
-- **Hardware requirement:** D0 must be connected to RST to enable wake-up
-- Sleep intervals defined as constants (lines 38-39)
+- `enterDeepSleep()`: Put ESP32-S3 in deep sleep
+- **ESP32-S3 wake mechanism:** Uses internal timer wake (esp_sleep_enable_timer_wakeup), no external jumper required
+- Sleep intervals defined as constants (lines 16-18)
 
 **Time Management** (src/main.cpp:548-577):
 - `syncNTP()`: Sync time from NTP servers (pool.ntp.org, time.nist.gov, time.google.com)
@@ -223,20 +223,19 @@ The device operates in a deep sleep cycle with two execution paths:
 - `formatUpdateTime()`: Format time as "DD-MM HH:MM GMT"
 - Re-syncs on every wake for accuracy
 
-### Hardware Pin Configuration (src/main.cpp:41-58)
+### Hardware Pin Configuration (src/DisplayManager.h:55-61)
 
 ```cpp
-#define CS_PIN (15)    // D8 (Blue)
-#define BUSY_PIN (12)  // D6 (Purple)
-#define RES_PIN (5)    // D1 (Orange)
-#define DC_PIN (4)     // D2 (White)
-// SCK: D5/GPIO14 (Green)
-// MOSI: D7/GPIO13 (Yellow)
+static constexpr uint8_t CS_PIN = 10;    // GPIO10 - SPI CS (Blue)
+static constexpr uint8_t DC_PIN = 11;    // GPIO11 - Data/Command (White)
+static constexpr uint8_t RES_PIN = 12;   // GPIO12 - Reset (Orange)
+static constexpr uint8_t BUSY_PIN = 13;  // GPIO13 - Busy input (Purple)
+// SPI pins: SCK=GPIO7 (Green), MOSI=GPIO6 (Yellow)
 // GND: Black
 // VCC: Red (3.3V)
 ```
 
-**Deep Sleep Wake:** D0 must be jumpered to RST.
+**Deep Sleep Wake:** ESP32-S3 uses internal timer wake mechanism (no external jumper required). The device automatically wakes from deep sleep using `esp_sleep_enable_timer_wakeup()`.
 
 ### Display Configuration (src/main.cpp:61)
 
@@ -288,9 +287,10 @@ In development mode (20-second wake cycles):
 - Inverted display requires tri-color support check: `display.epd2.hasColor`
 
 **When modifying deep sleep:**
-- Ensure D0-RST jumper is documented if changing wake mechanism
+- ESP32-S3 uses `esp_sleep_enable_timer_wakeup()` for timer-based wake (no external jumper needed)
 - Update both DEVELOPMENT_SLEEP_INTERVAL and PRODUCTION_SLEEP_INTERVAL if needed
 - Test deep sleep wake in both modes
+- Note: ESP32-S3 preserves RTC memory across deep sleep (used by OTARecovery)
 
 ### Testing OTA Updates
 
@@ -314,7 +314,7 @@ The `FIRMWARE_VERSION` define (line 22) exists for logging but is NOT used for u
 
 ### Deep Sleep Wake Detection
 
-The device differentiates between fresh boot and deep sleep wake using `ESP.getResetInfoPtr()->reason == REASON_DEEP_SLEEP_AWAKE` (line 992). This enables faster reconnection on wake (WiFi credentials cached) vs. full setup on fresh boot.
+The device differentiates between fresh boot and deep sleep wake using `esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER` (main.cpp:174). This enables faster reconnection on wake (WiFi credentials cached) vs. full setup on fresh boot.
 
 ### Config Persistence
 
@@ -336,7 +336,7 @@ WiFiManager (lines 89-110) only shows the captive portal if:
 1. No saved WiFi credentials exist, OR
 2. Connection to saved network fails
 
-Once credentials are saved to ESP8266 flash, the device will reconnect automatically on subsequent boots.
+Once credentials are saved to ESP32-S3 flash, the device will reconnect automatically on subsequent boots.
 
 ## Web Service Integration
 

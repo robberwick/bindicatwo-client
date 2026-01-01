@@ -2,7 +2,7 @@
 // enable or disable GxEPD2_GFX base class
 #define ENABLE_GxEPD2_GFX 0
 
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 
 #include "ConfigManager.h"
 #include "DisplayManager.h"
@@ -76,8 +76,9 @@ void enterDeepSleep() {
   // Ensure all serial output is sent
   Serial.flush();
 
-  // Enter deep sleep
-  ESP.deepSleep(sleepInterval);
+  // Enter deep sleep (ESP32 API)
+  esp_sleep_enable_timer_wakeup(sleepInterval);
+  esp_deep_sleep_start();
 }
 
 void setup() {
@@ -170,8 +171,8 @@ void setup() {
   });
 
   // Check if this is a wake up from deep sleep
-  rst_info *resetInfo = ESP.getResetInfoPtr();
-  if (resetInfo->reason == REASON_DEEP_SLEEP_AWAKE) {
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
     Serial.println("Woke up from deep sleep - performing periodic update");
     performPeriodicUpdate();
     enterDeepSleep();

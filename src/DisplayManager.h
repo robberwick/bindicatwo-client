@@ -52,11 +52,13 @@ private:
   // Display hardware instance (created in begin())
   GxEPD2_3C<GxEPD2_290_C90c, GxEPD2_290_C90c::HEIGHT>* display = nullptr;
 
-  // Pin definitions
-  static constexpr uint8_t CS_PIN = 15;
-  static constexpr uint8_t DC_PIN = 4;
-  static constexpr uint8_t RES_PIN = 5;
-  static constexpr uint8_t BUSY_PIN = 12;
+  // Pin definitions (ESP32-S3)
+  // Using safe GPIOs that don't conflict with strapping pins or USB
+  static constexpr uint8_t CS_PIN = 10;    // GPIO10 - SPI CS
+  static constexpr uint8_t DC_PIN = 11;    // GPIO11 - Data/Command
+  static constexpr uint8_t RES_PIN = 12;   // GPIO12 - Reset
+  static constexpr uint8_t BUSY_PIN = 13;  // GPIO13 - Busy (input)
+  // SPI pins: SCK=GPIO7, MOSI=GPIO6 (hardware SPI)
 
   // Helper struct for bin information
   struct BinInfo {
