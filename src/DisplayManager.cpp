@@ -277,19 +277,27 @@ void DisplayManager::showBinSchedule(const String& jsonData, const String& lastU
 
         // Render bin type (truncate if needed)
         display->setFont(binFont);
+        display->setTextColor(textColour);  // Ensure text color is set
         int maxTextWidth = display->width() - 20;  // Leave margins
         String truncatedType = truncateText(bin.type, maxTextWidth, binFont);
 
         display->setCursor(14, (int16_t)yPos);
         display->print(truncatedType);
+
+        // Increment yPos by actual text height to match calculation
+        yPos += binTypeHeight;
         yPos += binDescSpacing;
 
         // Display bin description (truncate if needed)
         display->setFont();
+        display->setTextColor(textColour);  // Ensure text color is set
         String truncatedDesc = truncateText(bin.binType, maxTextWidth, nullptr);
 
         display->setCursor(15, (int16_t)yPos);
         display->print(truncatedDesc);
+
+        // Increment yPos by actual text height to match calculation
+        yPos += binDescHeight;
 
         // Only add bin spacing if this is not the last bin in the group
         if (i < bins.size() - 1) {
