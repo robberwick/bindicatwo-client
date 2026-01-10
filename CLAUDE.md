@@ -16,6 +16,41 @@ Bindicator Client is an ESP8266-based e-paper display showing upcoming bin colle
 - Networking: WiFiManager for setup, HTTP OTA updates
 - Deep Sleep: Power-saving mode with configurable intervals
 
+## Development Environment
+
+**Primary Editor:** Neovim (with LSP support)
+- While the project directory is named "CLionProjects", development is primarily done in Neovim
+- LSP configuration is managed via `.clangd` file for cross-platform compatibility
+- The project uses clangd as the language server for C/C++ code intelligence
+
+### LSP Configuration for Neovim
+
+The `.clangd` configuration file suppresses ESP8266-specific compiler flags that clangd doesn't understand. After modifying `.clangd`:
+
+**Reload LSP in Neovim:**
+```vim
+:LspRestart
+```
+
+**Verify clangd is using the config:**
+```vim
+:LspInfo
+```
+
+**Common LSP false positives:**
+- `gmtime_r` undeclared - This is available in ESP8266 Arduino core, not Windows
+- `REASON_DEEP_SLEEP_AWAKE` undeclared - Defined in ESP8266 SDK `user_interface.h`
+- `rst_info` incomplete type - ESP8266-specific structure
+- Unknown compiler flags - Suppressed by `.clangd` config
+- `sys/cdefs.h` not found - POSIX header included by ESP8266 SDK
+
+**Suppression Strategy:**
+The `.clangd` configuration file **only** suppresses compiler flag warnings (unknown arguments).
+
+ESP8266-specific diagnostics (gmtime_r, rst_info, REASON_DEEP_SLEEP_AWAKE, sys/cdefs.h, etc.) are **intentionally NOT suppressed** to preserve full diagnostic coverage. These ~11 diagnostics are known false positives but are accepted as "noise" rather than globally disabling those diagnostic types.
+
+**Rationale:** Global suppression would prevent future detection of real issues that happen to use the same diagnostic codes. The LSP noise is preferable to losing diagnostic value.
+
 ## Build Commands
 
 ### Building and Uploading

@@ -1,0 +1,30 @@
+CompileFlags:
+  # Remove ESP8266-specific flags that clangd doesn't understand
+  Remove:
+    - -mlongcalls
+    - -mtext-section-literals
+    - -free
+    - -fipa-pta
+    - -falign-functions=4
+    - -mmu-*
+
+  # Add flags to help clangd understand the code
+  Add:
+    - -D__CLANGD__
+    - -Wno-unknown-pragmas
+    - -ferror-limit=0
+
+Diagnostics:
+  # Suppress compiler flag warnings only
+  # Other ESP8266-specific diagnostics are intentionally NOT suppressed
+  # to preserve diagnostic value, even though they are false positives
+  Suppress:
+    - drv_unknown_argument
+    - drv_unknown_argument_with_suggestion
+
+  # Don't show warnings from system headers
+  UnusedIncludes: None
+  MissingIncludes: None
+
+Index:
+  Background: Build
