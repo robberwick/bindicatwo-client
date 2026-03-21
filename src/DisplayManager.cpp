@@ -169,7 +169,7 @@ void DisplayManager::showBinSchedule(const String& jsonData, const String& lastU
       // If inverted, calculate the height of the entire group and draw background rectangle
       int groupStartY = yPos;
       if (useInverted) {
-        // Calculate ACTUAL height by measuring text with getTextBounds()
+        // Calculate height by simulating the rendering with baseline positioning
         int16_t x1, y1;
         uint16_t w, h;
 
@@ -177,36 +177,41 @@ void DisplayManager::showBinSchedule(const String& jsonData, const String& lastU
         display->setFont(groupIsNext ? &FreeMonoBold9pt7b : nullptr);
         String headerText = (daysUntil == 0) ? "TODAY" : (daysUntil == 1) ? "TOMORROW" : String(daysUntil) + " DAYS";
         display->getTextBounds(headerText, 0, 0, &x1, &y1, &w, &h);
-        int headerTextHeight = h;
 
-        // Calculate total height with proper spacing
-        int totalHeight = 0;
-        totalHeight += (groupIsNext ? 15 : 8);  // Space before header
-        totalHeight += headerTextHeight;         // Header text height
-        totalHeight += 2;                        // Gap before underline
-        totalHeight += 2;                        // Underline thickness
-        totalHeight += headerSpacing;            // Space after header
+        // Simulate rendering to track yPos and bottom-most pixel
+        int simYPos = 0;  // Relative to groupStartY
+        int bottomMostPixel = 0;
+
+        // Space before header
+        simYPos += (groupIsNext ? 15 : 8);
+
+        // Header text (baseline at simYPos, extends from simYPos+y1 to simYPos+y1+h)
+        bottomMostPixel = simYPos + y1 + h;
+
+        // Gap after baseline + headerSpacing
+        simYPos += 2 + headerSpacing;
 
         // Measure each bin's text
         for (size_t i = 0; i < bins.size(); i++) {
-          // Measure bin type (bold font)
+          // Bin type
           display->setFont(binFont);
           display->getTextBounds(bins[i].type, 0, 0, &x1, &y1, &w, &h);
-          totalHeight += h;
-          totalHeight += binDescSpacing;
+          bottomMostPixel = simYPos + y1 + h;  // Update bottom
+          simYPos += binDescSpacing;
 
-          // Measure bin description (default font)
+          // Bin description
           display->setFont();
           display->getTextBounds(bins[i].binType, 0, 0, &x1, &y1, &w, &h);
-          totalHeight += h;
+          bottomMostPixel = simYPos + y1 + h;  // Update bottom
 
-          // Add spacing between bins (except after last bin)
+          // Spacing between bins (if not last)
           if (i < bins.size() - 1) {
-            totalHeight += lineHeight + binDescSpacing;
+            simYPos += lineHeight + binDescSpacing;
           }
         }
 
-        totalHeight += groupSpacing;  // Space after group
+        // Total height is from groupStartY (0) to bottom-most pixel
+        int totalHeight = bottomMostPixel;
 
         // Draw red filled rectangle with calculated height
         display->fillRect(5, groupStartY, (int16_t)(display->width() - 10), totalHeight, GxEPD_RED);
@@ -277,27 +282,21 @@ void DisplayManager::showBinSchedule(const String& jsonData, const String& lastU
 
         // Render bin type (truncate if needed)
         display->setFont(binFont);
-        display->setTextColor(textColour);  // Ensure text color is set
+        display->setTextColor(textColour);
         int maxTextWidth = display->width() - 20;  // Leave margins
         String truncatedType = truncateText(bin.type, maxTextWidth, binFont);
 
         display->setCursor(14, (int16_t)yPos);
         display->print(truncatedType);
-
-        // Increment yPos by actual text height to match calculation
-        yPos += binTypeHeight;
         yPos += binDescSpacing;
 
         // Display bin description (truncate if needed)
         display->setFont();
-        display->setTextColor(textColour);  // Ensure text color is set
+        display->setTextColor(textColour);
         String truncatedDesc = truncateText(bin.binType, maxTextWidth, nullptr);
 
         display->setCursor(15, (int16_t)yPos);
         display->print(truncatedDesc);
-
-        // Increment yPos by actual text height to match calculation
-        yPos += binDescHeight;
 
         // Only add bin spacing if this is not the last bin in the group
         if (i < bins.size() - 1) {
